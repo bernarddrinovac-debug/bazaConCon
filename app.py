@@ -190,6 +190,11 @@ st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Preuzmi centralnu bazu")
 st.caption("Ovo je 'master' dataset. Preuzmi i spremi u repo u folder data/ (npr. kao master.parquet) da baza bude trajna.")
 parquet_bytes = io.BytesIO()
-base.to_parquet(parquet_bytes, index=False)
-st.download_button("Download master.parquet", data=parquet_bytes.getvalue(), file_name="master.parquet")
-st.markdown("</div>", unsafe_allow_html=True)
+csv_bytes = base.to_csv(index=False).encode("utf-8")
+st.download_button(
+    "Download master.csv",
+    data=csv_bytes,
+    file_name="master.csv",
+    mime="text/csv"
+)
+
