@@ -1,10 +1,11 @@
 import io
 import re
 from datetime import datetime
+
 import numpy as np
 import pandas as pd
-import streamlit as st
 import plotly.express as px
+import streamlit as st
 
 st.set_page_config(page_title="Centralna baza troškovnika", layout="wide")
 
@@ -26,9 +27,7 @@ html, body, [class*="css"]{
   color:var(--ink);
   background:var(--bg);
 }
-h1,h2,h3{
-  font-family:"Playfair Display",serif !important;
-}
+h1,h2,h3{ font-family:"Playfair Display",serif !important; }
 .card{
   background:var(--card);
   border:1px solid var(--border);
@@ -82,6 +81,7 @@ def guess_date_from_filename(name: str):
     Primjeri: 2025-01-19, 19.01.2025, 20250119
     """
     s = name
+
     m = re.search(r"(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})", s)
     if m:
         y, mo, d = map(int, m.groups())
@@ -109,7 +109,7 @@ def normalize_table(df: pd.DataFrame, source_file: str, sheet: str) -> pd.DataFr
     df.columns = [str(c).strip() for c in df.columns]
 
     def find_col(options):
-        # exact
+        # exact match
         for o in options:
             for c in df.columns:
                 if str(c).strip().lower() == o.lower():
@@ -121,7 +121,7 @@ def normalize_table(df: pd.DataFrame, source_file: str, sheet: str) -> pd.DataFr
                     return c
         return None
 
-    c_desc = find_col(["Opis", "Naziv", "Stavka", "Opis stavke"])
+    c_desc = find_col(["Opis", "Naziv", "Stavka", "Opis stavke", "Opis radova"])
     c_unit = find_col(["JM", "J.M.", "Jed mj", "Jed. mjere", "Mjerna jedinica"])
     c_qty = find_col(["Količina", "Kol", "Qty"])
     c_up = find_col(["Jedinična cijena", "Jed. cijena", "Cijena", "Unit price"])
@@ -141,7 +141,7 @@ def normalize_table(df: pd.DataFrame, source_file: str, sheet: str) -> pd.DataFr
     out["sheet"] = sheet
     out["datum"] = guess_date_from_filename(source_file)
 
-    # čišćenje
+    # čišćenje praznih opisa i očitih headera
     out = out[out["opis"].str.strip().ne("")].copy()
     out = out[~out["opis"].str.lower().isin(["opis", "stavka", "naziv"])].copy()
 
@@ -205,7 +205,10 @@ with st.spinner("Učitavam XLSX datoteke i gradim bazu..."):
     base = ingest_xlsx_files(xlsx_files)
 
 if base.empty:
-    st.error("Nisam uspio prepoznati tablice u Excelima. Ako su kolone nestandardne, u FAZI 2 dodajemo ručno mapiranje stupaca.")
+    st.error(
+        "Nisam uspio prepoznati tablice u Excelima. "
+        "Ako su kolone nestandardne, u sljedećoj fazi dodajemo ručno mapiranje stupaca."
+    )
     st.stop()
 
 # --------------------------
@@ -226,9 +229,11 @@ st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Pretraga stavki")
 q = st.text_input("Opis (npr. 'PVC prozor', 'armatura', 'estrih')", value="")
 jm = st.text_input("JM filter (opcionalno)", value="")
+only_with_price = st.checkbox("Prikaži samo redove s jediničnom cijenom", value=False)
 st.markdown("</div>", unsafe_allow_html=True)
 
 f = base.copy()
+
 if q.strip():
     qq = re.sub(r"\s+", " ", q.strip().lower())
     qq = re.sub(r"[^\w\sčćđšž]", "", qq)
@@ -236,6 +241,9 @@ if q.strip():
 
 if jm.strip():
     f = f[f["jm"].str.contains(jm.strip(), case=False, na=False)]
+
+if only_with_price:
+    f = f.dropna(subset=["jed_cijena"])
 
 # --------------------------
 # Results
@@ -276,7 +284,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.write("")
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("Preuzmi centralnu bazu")
-st.caption("Preuzmi master dataset kao CSV. Preporuka: spremi ga kao master.csv u repo u folder data/ (ako želiš trajnu bazu).")
+st.caption("Preuzmi master dataset kao CSV. (Bez pyarrow/parquet radi stabilnosti u Streamlit Cloudu.)")
 csv_bytes = base.to_csv(index=False).encode("utf-8")
 st.download_button(
     "Download master.csv",
